@@ -1,0 +1,68 @@
+version: "3.4"
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: ./../dockerfiles/app.Dockerfile
+    args:
+      RUBY_VERSION: '2.6.5'
+      BUNDLER_VERSION: '1.17.3'
+      PG_MAJOR: '11'
+      NODE_MAJOR: '12'
+      YARN_VERSION: '1.19.2-1'
+  image:
+    bookstore-dev:1.0.0
+  tmpfs:
+    - /tmp
+ 
+x-backend: &backend
+  <<: *app
+  stdin_open: true
+  tty: true
+  env_file: ./docker/docker.env
+  # environment:
+  #   RAILS_ENV: development
+  #   PG_HOST: postgres
+  #   PG_PORT: 5432
+  #   REDIS_URL: redis://redis:6379
+  #   WEB_CUNCURRENCY: 1
+  #   EDITOR: vim
+  #   RAILS_LOG_TO_STDOUT: 'true'
+  volumes:
+    - .:/app:cached
+    - rails_cache:/app/tmp/cache
+    - bundle:/app/vendor/bundle
+  depends_on:
+    - db
+    - redis
+
+services:
+  rails:
+    <<: *backend
+    entrypoint: docker/app.entrypoint.sh
+    command: bundle exec rails server -b 0.0.0.0
+    ports:
+      - 3000:3000
+
+  sidekiq:
+    <<: *backend
+    command: bundle exec sidekiq -C config/sidekiq.yml
+
+  db:
+    image: postgres:11.5
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./log:/root/log:cached
+    ports:
+      - 5432
+
+  redis:
+    image: redis
+    ports:
+      - 6379
+
+volumes:
+  postgres:
+  redis:
+  bundle:
+  rails_cache:
